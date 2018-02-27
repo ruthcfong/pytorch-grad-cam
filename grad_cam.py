@@ -101,7 +101,7 @@ class GradCam:
 
 		self.model.features.zero_grad()
 		self.model.classifier.zero_grad()
-		one_hot.backward(retain_variables=True)
+                one_hot.backward(retain_variables=True) # TODO: update
 
 		grads_val = self.extractor.get_gradients()[-1].cpu().data.numpy()
 
@@ -195,35 +195,30 @@ def get_args():
 
 	return args
 
-if __name__ == '__main__':
-	""" python grad_cam.py <path_to_image>
-	1. Loads an image with opencv.
-	2. Preprocesses it for VGG19 and converts to a pytorch variable.
-	3. Makes a forward pass to find the category index with the highest score,
-	and computes intermediate activations.
-	Makes the visualization. """
 
-	args = get_args()
-
+def run_grad_cam(image='./examples/both.png', neuron_selection='random', cuda=False):
 	# Can work with any model, but it assumes that the model has a 
 	# feature method, and a classifier method,
 	# as in the VGG models in torchvision.
 	grad_cam = GradCam(model = models.vgg19(pretrained=True), \
-					target_layer_names = ["35"], use_cuda=args.use_cuda)
+					target_layer_names = ["35"], use_cuda=cuda)
 
-	img = cv2.imread(args.image_path, 1)
+	img = cv2.imread(image, 1)
 	img = np.float32(cv2.resize(img, (224, 224))) / 255
 	input = preprocess_image(img)
 
-	# If None, returns the map for the highest scoring category.
-	# Otherwise, targets the requested index.
-	target_index = None
+        if neuron_selection == 'max':
+            target_index = None
+        elif neuron_selection == 'random':
+            target_index = np.random.randint(0, 1000)
+        else:
+            assert(False)
 
 	mask = grad_cam(input, target_index)
 
 	show_cam_on_image(img, mask)
 
-	gb_model = GuidedBackpropReLUModel(model = models.vgg19(pretrained=True), use_cuda=args.use_cuda)
+	gb_model = GuidedBackpropReLUModel(model = models.vgg19(pretrained=True), use_cuda=cuda)
 	gb = gb_model(input, index=target_index)
 	utils.save_image(torch.from_numpy(gb), 'gb.jpg')
 
@@ -233,3 +228,19 @@ if __name__ == '__main__':
 
 	cam_gb = np.multiply(cam_mask, gb)
 	utils.save_image(torch.from_numpy(cam_gb), 'cam_gb.jpg')
+
+        #return mask
+        return cam_gb
+
+
+if __name__ == '__main__':
+	""" python grad_cam.py <path_to_image>
+	1. Loads an image with opencv.
+	2. Preprocesses it for VGG19 and converts to a pytorch variable.
+	3. Makes a forward pass to find the category index with the highest score,
+	and computes intermediate activations.
+	Makes the visualization. """
+
+	args = get_args()
+        run_grad_cam(image=args.image_path, neuron_selection='max', cuda=args.use_cuda)
+
